@@ -23,6 +23,8 @@ use constant BROKEN_SCALAR_INITIALIZATION => ($] < 5.010);
 use constant BROKEN_GLOB_ASSIGNMENT => ($] < 5.013004);
 # pre-5.10, ->isa lookups were cached in the ::ISA::CACHE:: slot
 use constant HAS_ISA_CACHE => ($] < 5.010);
+# need to encode names before accessing stash
+use constant ENCODED_STASH => ($] < 5.016);
 
 =head1 SYNOPSIS
 
@@ -51,15 +53,11 @@ sub new {
             'namespace' => $package,
         }, $class;
     }
-    elsif ($package =~ /\A[0-9A-Z_a-z]+(?:::[0-9A-Z_a-z]+)*\z/) {
+    else {
         return bless {
             'package' => $package,
         }, $class;
     }
-    else {
-        confess "$package is not a module name";
-    }
-
 }
 
 sub name {
@@ -199,6 +197,8 @@ sub add_symbol {
             *{"__ANON__::$name"};
         }
 
+        utf8::encode($name)
+            if ENCODED_STASH and utf8::is_utf8($name);
         if (@_ > 2) {
             no warnings 'redefine';
             *{ $namespace->{$name} } = ref $initial_value
@@ -236,6 +236,8 @@ sub _undef_ref_for_type {
 
 sub remove_glob {
     my ($self, $name) = @_;
+    utf8::encode($name)
+        if ENCODED_STASH and utf8::is_utf8($name);
     delete $self->namespace->{$name};
 }
 
@@ -246,6 +248,8 @@ sub has_symbol {
 
     my $namespace = $self->namespace;
 
+    utf8::encode($name)
+        if ENCODED_STASH and utf8::is_utf8($name);
     return unless exists $namespace->{$name};
 
     my $entry_ref = \$namespace->{$name};
@@ -276,6 +280,9 @@ sub get_symbol {
     my ($self, $variable, %opts) = @_;
 
     my ($name, $sigil, $type) = _deconstruct_variable_name($variable);
+
+    utf8::encode($name)
+        if ENCODED_STASH and utf8::is_utf8($name);
 
     my $namespace = $self->namespace;
 
